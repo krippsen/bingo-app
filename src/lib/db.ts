@@ -1,23 +1,8 @@
-import { promises as fs } from 'fs'
-import path from 'path'
+import { kv } from '@vercel/kv'
 import type { BingoCard } from '@/types'
 import { createDefaultBingoCard } from './bingo-utils'
 
-// Simple file-based storage for development
-// Replace with Vercel Postgres or KV for production
-const DATA_FILE = path.join(process.cwd(), 'data', 'bingo-card.json')
-
-/**
- * Ensure the data directory exists
- */
-async function ensureDataDir(): Promise<void> {
-  const dataDir = path.dirname(DATA_FILE)
-  try {
-    await fs.access(dataDir)
-  } catch {
-    await fs.mkdir(dataDir, { recursive: true })
-  }
-}
+const BINGO_CARD_KEY = 'bingo-card:main'
 
 /**
  * Get the bingo card from storage
@@ -25,19 +10,15 @@ async function ensureDataDir(): Promise<void> {
  */
 export async function getBingoCard(): Promise<BingoCard | null> {
   try {
-    await ensureDataDir()
-    const data = await fs.readFile(DATA_FILE, 'utf-8')
-    const card = JSON.parse(data) as BingoCard
+    const card = await kv.get<BingoCard>(BINGO_CARD_KEY)
+    if (!card) return null
+
     return {
       ...card,
-      markedCells: card.markedCells || [],  // Default to empty array if missing
+      markedCells: card.markedCells || [],
       updatedAt: new Date(card.updatedAt),
     }
   } catch (error) {
-    // File doesn't exist or is invalid, return null
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return null
-    }
     console.error('Error reading bingo card:', error)
     return null
   }
@@ -49,8 +30,6 @@ export async function getBingoCard(): Promise<BingoCard | null> {
  * @returns The saved bingo card
  */
 export async function saveBingoCard(cells: string[]): Promise<BingoCard> {
-  await ensureDataDir()
-
   // Preserve existing markedCells if card exists
   const existing = await getBingoCard()
 
@@ -61,7 +40,7 @@ export async function saveBingoCard(cells: string[]): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  await fs.writeFile(DATA_FILE, JSON.stringify(card, null, 2), 'utf-8')
+  await kv.set(BINGO_CARD_KEY, card)
 
   return card
 }
@@ -84,7 +63,7 @@ export async function toggleCellMark(cellIndex: number): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  await fs.writeFile(DATA_FILE, JSON.stringify(updatedCard, null, 2), 'utf-8')
+  await kv.set(BINGO_CARD_KEY, updatedCard)
 
   return updatedCard
 }
@@ -102,7 +81,7 @@ export async function resetMarkedCells(): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  await fs.writeFile(DATA_FILE, JSON.stringify(updatedCard, null, 2), 'utf-8')
+  await kv.set(BINGO_CARD_KEY, updatedCard)
 
   return updatedCard
 }
