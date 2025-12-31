@@ -1,17 +1,29 @@
-import { kv } from '@vercel/kv'
+import { put, list } from '@vercel/blob'
 import type { BingoCard } from '@/types'
 import { createDefaultBingoCard } from './bingo-utils'
 
-const BINGO_CARD_KEY = 'bingo-card:main'
+const BINGO_CARD_FILENAME = 'bingo-card.json'
 
 /**
- * Get the bingo card from storage
+ * Get the bingo card from Vercel Blob storage
  * @returns The bingo card or null if not found
  */
 export async function getBingoCard(): Promise<BingoCard | null> {
   try {
-    const card = await kv.get<BingoCard>(BINGO_CARD_KEY)
-    if (!card) return null
+    // List blobs to find our bingo card
+    const { blobs } = await list({ prefix: BINGO_CARD_FILENAME })
+
+    if (blobs.length === 0) {
+      return null
+    }
+
+    // Fetch the blob content
+    const response = await fetch(blobs[0].url)
+    if (!response.ok) {
+      return null
+    }
+
+    const card = await response.json() as BingoCard
 
     return {
       ...card,
@@ -25,7 +37,7 @@ export async function getBingoCard(): Promise<BingoCard | null> {
 }
 
 /**
- * Save the bingo card to storage (preserves existing markedCells)
+ * Save the bingo card to Vercel Blob storage (preserves existing markedCells)
  * @param cells - Array of 25 cell strings
  * @returns The saved bingo card
  */
@@ -40,7 +52,10 @@ export async function saveBingoCard(cells: string[]): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  await kv.set(BINGO_CARD_KEY, card)
+  await put(BINGO_CARD_FILENAME, JSON.stringify(card), {
+    access: 'public',
+    addRandomSuffix: false,
+  })
 
   return card
 }
@@ -63,7 +78,10 @@ export async function toggleCellMark(cellIndex: number): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  await kv.set(BINGO_CARD_KEY, updatedCard)
+  await put(BINGO_CARD_FILENAME, JSON.stringify(updatedCard), {
+    access: 'public',
+    addRandomSuffix: false,
+  })
 
   return updatedCard
 }
@@ -81,7 +99,10 @@ export async function resetMarkedCells(): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  await kv.set(BINGO_CARD_KEY, updatedCard)
+  await put(BINGO_CARD_FILENAME, JSON.stringify(updatedCard), {
+    access: 'public',
+    addRandomSuffix: false,
+  })
 
   return updatedCard
 }
