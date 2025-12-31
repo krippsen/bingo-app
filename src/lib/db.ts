@@ -55,6 +55,7 @@ export async function saveBingoCard(cells: string[]): Promise<BingoCard> {
   await put(BINGO_CARD_FILENAME, JSON.stringify(card), {
     access: 'public',
     addRandomSuffix: false,
+    allowOverwrite: true,
   })
 
   return card
@@ -81,6 +82,7 @@ export async function toggleCellMark(cellIndex: number): Promise<BingoCard> {
   await put(BINGO_CARD_FILENAME, JSON.stringify(updatedCard), {
     access: 'public',
     addRandomSuffix: false,
+    allowOverwrite: true,
   })
 
   return updatedCard
@@ -102,6 +104,7 @@ export async function resetMarkedCells(): Promise<BingoCard> {
   await put(BINGO_CARD_FILENAME, JSON.stringify(updatedCard), {
     access: 'public',
     addRandomSuffix: false,
+    allowOverwrite: true,
   })
 
   return updatedCard
