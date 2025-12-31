@@ -33,7 +33,7 @@ export default function AdminEdit() {
   useEffect(() => {
     async function fetchCard() {
       try {
-        const response = await fetch('/api/bingo')
+        const response = await fetch('/api/bingo', { cache: 'no-store' })
         if (response.ok) {
           const data = await response.json()
           if (data.success && data.data?.cells) {

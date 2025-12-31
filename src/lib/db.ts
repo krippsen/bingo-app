@@ -17,8 +17,8 @@ export async function getBingoCard(): Promise<BingoCard | null> {
       return null
     }
 
-    // Fetch the blob content
-    const response = await fetch(blobs[0].url)
+    // Fetch the blob content (no-store to prevent caching)
+    const response = await fetch(blobs[0].url, { cache: 'no-store' })
     if (!response.ok) {
       return null
     }
