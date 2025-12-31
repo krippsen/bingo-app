@@ -1,80 +1,57 @@
-import { put, list, del } from '@vercel/blob'
+import { promises as fs } from 'fs'
+import path from 'path'
 import type { BingoCard } from '@/types'
 import { createDefaultBingoCard } from './bingo-utils'
 
-const BINGO_CARD_FILENAME = 'bingo-card.json'
+// Simple file-based storage for development
+// Replace with Vercel Postgres or KV for production
+const DATA_FILE = path.join(process.cwd(), 'data', 'bingo-card.json')
 
 /**
- * Get the bingo card from Vercel Blob storage
+ * Ensure the data directory exists
+ */
+async function ensureDataDir(): Promise<void> {
+  const dataDir = path.dirname(DATA_FILE)
+  try {
+    await fs.access(dataDir)
+  } catch {
+    await fs.mkdir(dataDir, { recursive: true })
+  }
+}
+
+/**
+ * Get the bingo card from storage
  * @returns The bingo card or null if not found
  */
 export async function getBingoCard(): Promise<BingoCard | null> {
   try {
-    // List blobs to find our bingo card
-    const { blobs } = await list({ prefix: BINGO_CARD_FILENAME })
-
-    if (blobs.length === 0) {
-      console.log('[DB] No blob found')
-      return null
-    }
-
-    // Get the most recent blob (in case there are multiples)
-    const blob = blobs[0]
-    console.log('[DB] Found blob:', blob.pathname, 'URL:', blob.url)
-
-    // Add timestamp to bust any edge/CDN caching
-    const urlWithCacheBust = `${blob.url}?t=${Date.now()}&r=${Math.random()}`
-
-    // Fetch the blob content with all cache-busting options
-    const response = await fetch(urlWithCacheBust, {
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-      }
-    })
-
-    if (!response.ok) {
-      console.error('[DB] Failed to fetch blob:', response.status)
-      return null
-    }
-
-    const card = await response.json() as BingoCard
-    console.log('[DB] Fetched card - cells[0]:', card.cells?.[0], 'markedCells:', card.markedCells?.length || 0)
-
+    await ensureDataDir()
+    const data = await fs.readFile(DATA_FILE, 'utf-8')
+    const card = JSON.parse(data) as BingoCard
     return {
       ...card,
-      markedCells: card.markedCells || [],
+      markedCells: card.markedCells || [],  // Default to empty array if missing
       updatedAt: new Date(card.updatedAt),
     }
   } catch (error) {
-    console.error('[DB] Error reading bingo card:', error)
+    // File doesn't exist or is invalid, return null
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+    console.error('Error reading bingo card:', error)
     return null
   }
 }
 
 /**
- * Delete all existing bingo card blobs
- */
-async function deleteExistingBlobs(): Promise<void> {
-  try {
-    const { blobs } = await list({ prefix: BINGO_CARD_FILENAME })
-    if (blobs.length > 0) {
-      console.log('[DB] Deleting', blobs.length, 'existing blob(s)')
-      await Promise.all(blobs.map(blob => del(blob.url)))
-    }
-  } catch (error) {
-    console.error('[DB] Error deleting blobs:', error)
-  }
-}
-
-/**
- * Save the bingo card to Vercel Blob storage (preserves existing markedCells)
+ * Save the bingo card to storage (preserves existing markedCells)
  * @param cells - Array of 25 cell strings
  * @returns The saved bingo card
  */
 export async function saveBingoCard(cells: string[]): Promise<BingoCard> {
-  // Get existing card to preserve markedCells
+  await ensureDataDir()
+
+  // Preserve existing markedCells if card exists
   const existing = await getBingoCard()
 
   const card: BingoCard = {
@@ -84,19 +61,7 @@ export async function saveBingoCard(cells: string[]): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  console.log('[DB] Saving card - cells[0]:', cells[0], 'markedCells:', card.markedCells.length)
-
-  // Delete old blobs first to avoid stale data
-  await deleteExistingBlobs()
-
-  // Save new blob
-  const blob = await put(BINGO_CARD_FILENAME, JSON.stringify(card), {
-    access: 'public',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-  })
-
-  console.log('[DB] Saved to:', blob.url)
+  await fs.writeFile(DATA_FILE, JSON.stringify(card, null, 2), 'utf-8')
 
   return card
 }
@@ -109,8 +74,6 @@ export async function saveBingoCard(cells: string[]): Promise<BingoCard> {
 export async function toggleCellMark(cellIndex: number): Promise<BingoCard> {
   const card = await getOrCreateBingoCard()
 
-  console.log('[DB] Toggle - before:', card.markedCells, 'index:', cellIndex)
-
   const markedCells = card.markedCells.includes(cellIndex)
     ? card.markedCells.filter(i => i !== cellIndex)  // Unmark
     : [...card.markedCells, cellIndex]                // Mark
@@ -121,19 +84,7 @@ export async function toggleCellMark(cellIndex: number): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  console.log('[DB] Toggle - after:', updatedCard.markedCells)
-
-  // Delete old blobs first
-  await deleteExistingBlobs()
-
-  // Save new blob
-  const blob = await put(BINGO_CARD_FILENAME, JSON.stringify(updatedCard), {
-    access: 'public',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-  })
-
-  console.log('[DB] Toggle saved to:', blob.url)
+  await fs.writeFile(DATA_FILE, JSON.stringify(updatedCard, null, 2), 'utf-8')
 
   return updatedCard
 }
@@ -151,15 +102,7 @@ export async function resetMarkedCells(): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  // Delete old blobs first
-  await deleteExistingBlobs()
-
-  // Save new blob
-  await put(BINGO_CARD_FILENAME, JSON.stringify(updatedCard), {
-    access: 'public',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-  })
+  await fs.writeFile(DATA_FILE, JSON.stringify(updatedCard, null, 2), 'utf-8')
 
   return updatedCard
 }
@@ -175,6 +118,5 @@ export async function getOrCreateBingoCard(): Promise<BingoCard> {
   }
 
   // Create default card
-  console.log('[DB] Creating default bingo card')
   return await saveBingoCard(createDefaultBingoCard())
 }

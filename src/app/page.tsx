@@ -12,7 +12,7 @@ export default function Home() {
   useEffect(() => {
     async function fetchBingoCard() {
       try {
-        const response = await fetch('/api/bingo', { cache: 'no-store' })
+        const response = await fetch('/api/bingo')
         if (!response.ok) {
           throw new Error('Failed to fetch bingo card')
         }
@@ -81,7 +81,6 @@ export default function Home() {
       {/* Bingo Card */}
       <BingoCard
         cells={bingoCard?.cells}
-        markedCells={bingoCard?.markedCells}
         isLoading={isLoading}
         error={error}
       />

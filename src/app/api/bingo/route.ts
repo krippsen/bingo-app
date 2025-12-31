@@ -4,10 +4,6 @@ import { validateBingoCard } from '@/lib/validation'
 import { auth } from '@/lib/auth'
 import { TOTAL_CELLS } from '@/types'
 
-// Force dynamic to prevent caching
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
-
 /**
  * GET /api/bingo
  * Fetch the current bingo card
