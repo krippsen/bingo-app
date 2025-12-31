@@ -14,16 +14,29 @@ export async function getBingoCard(): Promise<BingoCard | null> {
     const { blobs } = await list({ prefix: BINGO_CARD_FILENAME })
 
     if (blobs.length === 0) {
+      console.log('No blob found, returning null')
       return null
     }
 
-    // Fetch the blob content (no-store to prevent caching)
-    const response = await fetch(blobs[0].url, { cache: 'no-store' })
+    // Add timestamp to bust any edge/CDN caching
+    const urlWithCacheBust = `${blobs[0].url}?t=${Date.now()}`
+
+    // Fetch the blob content with all cache-busting options
+    const response = await fetch(urlWithCacheBust, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      }
+    })
+
     if (!response.ok) {
+      console.error('Failed to fetch blob:', response.status)
       return null
     }
 
     const card = await response.json() as BingoCard
+    console.log('Fetched card with markedCells:', card.markedCells)
 
     return {
       ...card,
@@ -52,11 +65,13 @@ export async function saveBingoCard(cells: string[]): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  await put(BINGO_CARD_FILENAME, JSON.stringify(card), {
+  const blob = await put(BINGO_CARD_FILENAME, JSON.stringify(card), {
     access: 'public',
     addRandomSuffix: false,
     allowOverwrite: true,
   })
+
+  console.log('Saved card to blob:', blob.url)
 
   return card
 }
@@ -69,6 +84,8 @@ export async function saveBingoCard(cells: string[]): Promise<BingoCard> {
 export async function toggleCellMark(cellIndex: number): Promise<BingoCard> {
   const card = await getOrCreateBingoCard()
 
+  console.log('Before toggle - markedCells:', card.markedCells, 'toggling index:', cellIndex)
+
   const markedCells = card.markedCells.includes(cellIndex)
     ? card.markedCells.filter(i => i !== cellIndex)  // Unmark
     : [...card.markedCells, cellIndex]                // Mark
@@ -79,11 +96,15 @@ export async function toggleCellMark(cellIndex: number): Promise<BingoCard> {
     updatedAt: new Date(),
   }
 
-  await put(BINGO_CARD_FILENAME, JSON.stringify(updatedCard), {
+  console.log('After toggle - markedCells:', updatedCard.markedCells)
+
+  const blob = await put(BINGO_CARD_FILENAME, JSON.stringify(updatedCard), {
     access: 'public',
     addRandomSuffix: false,
     allowOverwrite: true,
   })
+
+  console.log('Saved toggled card to blob:', blob.url)
 
   return updatedCard
 }
@@ -121,5 +142,6 @@ export async function getOrCreateBingoCard(): Promise<BingoCard> {
   }
 
   // Create default card
+  console.log('Creating default bingo card')
   return await saveBingoCard(createDefaultBingoCard())
 }

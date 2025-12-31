@@ -51,6 +51,7 @@ export default function BingoCard({
   useEffect(() => {
     if (initialMarkedCells) {
       setMarkedCells(initialMarkedCells)
+      lastFetchRef.current = JSON.stringify(initialMarkedCells)
     }
   }, [initialMarkedCells])
 
@@ -109,62 +110,55 @@ export default function BingoCard({
     }
   }, [markedCells, isPreview, hasWon])
 
-  // Toggle cell mark via server
+  // Toggle cell mark via server - NO optimistic updates, trust server only
   const handleCellToggle = useCallback(async (index: number) => {
     if (isPreview || isToggling) return
 
     setIsToggling(true)
-
-    // Optimistic update
-    const wasMarked = markedCells.includes(index)
-    setMarkedCells(prev =>
-      wasMarked ? prev.filter(i => i !== index) : [...prev, index]
-    )
 
     try {
       const response = await fetch('/api/bingo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cellIndex: index }),
+        cache: 'no-store',
       })
 
       if (response.ok) {
         const data = await response.json()
         if (data.success && data.data) {
-          // Update with server state
+          // Update with server state - this is the single source of truth
           setMarkedCells(data.data.markedCells || [])
+          setCells(data.data.cells || cells)
           lastFetchRef.current = JSON.stringify(data.data.markedCells || [])
         }
       } else {
-        // Revert on error
-        setMarkedCells(prev =>
-          wasMarked ? [...prev, index] : prev.filter(i => i !== index)
-        )
+        console.error('Failed to toggle cell:', response.status)
       }
     } catch (err) {
       console.error('Error toggling cell:', err)
-      // Revert on error
-      setMarkedCells(prev =>
-        wasMarked ? [...prev, index] : prev.filter(i => i !== index)
-      )
     } finally {
       setIsToggling(false)
     }
-  }, [isPreview, isToggling, markedCells])
+  }, [isPreview, isToggling, cells])
 
   // Reset all marks via server (admin only)
   const handleReset = useCallback(async () => {
     try {
       const response = await fetch('/api/bingo', {
         method: 'DELETE',
+        cache: 'no-store',
       })
 
       if (response.ok) {
-        setMarkedCells([])
+        const data = await response.json()
+        if (data.success && data.data) {
+          setMarkedCells(data.data.markedCells || [])
+          lastFetchRef.current = JSON.stringify(data.data.markedCells || [])
+        }
         setWinningCells([])
         setHasWon(false)
         setShowWinModal(false)
-        lastFetchRef.current = '[]'
         onReset?.()
       } else {
         console.error('Failed to reset marks - unauthorized or server error')
@@ -254,10 +248,17 @@ export default function BingoCard({
               isMarked={markedCells.includes(index)}
               isWinning={winningCells.includes(index)}
               onToggle={handleCellToggle}
-              disabled={isPreview}
+              disabled={isPreview || isToggling}
             />
           ))}
         </div>
+
+        {/* Toggling indicator */}
+        {isToggling && (
+          <div className="mt-3 text-center text-sm text-gray-500">
+            Saving...
+          </div>
+        )}
 
         {/* Win banner */}
         {hasWon && !isPreview && (

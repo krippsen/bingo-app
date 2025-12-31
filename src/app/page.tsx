@@ -81,6 +81,7 @@ export default function Home() {
       {/* Bingo Card */}
       <BingoCard
         cells={bingoCard?.cells}
+        markedCells={bingoCard?.markedCells}
         isLoading={isLoading}
         error={error}
       />
