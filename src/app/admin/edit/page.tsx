@@ -90,6 +90,7 @@ export default function AdminEdit() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ cells }),
+        cache: 'no-store',
       })
 
       const data = await response.json()
